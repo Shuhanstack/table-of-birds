@@ -1,0 +1,725 @@
+---
+title: "Table of Birds"
+author: Shuhan Song
+date: 2024-05-31
+format: 
+  html:
+    toc: true
+    toc-depth: 4
+    toc-expand: 4
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+![](table_snapshot.png){fig-align="center"}
+
+# Introduction
+
+Birders love birds for their beautiful features, lovely behaviors, and melodious songs. However, there is more to birds than meets the eye. Birds are a diverse group of animals with a wide range of life history traits, habitats, and diets. Some birds are at risk of extinction due to habitat loss, climate change, and other human activities. This table of birds aims to provide a comprehensive overview of bird species around the world, including their life history traits, conservation status, bird call, breeding bird survey data, diet, habitat, range, and similar species.
+
+[Link to the final table](final_table.html)
+
+# Read in data
+
+```{r load-packages}
+# load packages 
+library(tidyverse)
+library(here)
+library(janitor)
+library(readxl)
+```
+
+#### Life history, IUCN, bird call, and breeding bird survey
+
+-   Life history data
+
+Life history data was collected from a life history database published in *Ecology* in 2015 by Myhrvold et al. The data contains about 30 life history traits such as body mass, body length, maturity days, longevity, and clutch sizes for 11,548 species of birds, mammals, and reptiles. The data was downloaded from [Wiley archive](https://wiley.figshare.com/articles/dataset/Full_Archive/3563457/1).
+
+-   IUCN Red List data
+
+The [IUCN's Red List](https://www.iucnredlist.org/), short for the International Union for Conservation of Nature’s Red List, is one of the world's most comprehensive assessments on global extinction risk status for animal, fungus, and plants. Species are ranked in seven categories: Least Concern, Near Threatened, Vulnerable, Endangered, Critically Endangered, Extinct in the Wild, and Extinct. The Red List helps us understand which species are at risk of extinction and what conservation actions are needed to prevent it. The IUCN data was downloaded from [GBIF](https://www.gbif.org/dataset/19491596-35ae-4a91-9a98-85cf505f1bd3#).
+
+-   Bird call
+
+Bird call data was collected from [Xeno-canto](https://www.xeno-canto.org/), a website dedicated to sharing wildlife sounds from all over the world. The data was downloaded from [GBIF](https://www.gbif.org/dataset/b1047888-ae52-4179-9dd5-5448ea342a24). The data contains 730,958 occurrences of bird calls from 24,931 species around the world. While I only kept audio data, it also contains latitude and longitude of the observation, and the spectrogram of the sound recording.
+
+To keep the data preparation part short, I migrated all the steps of reading, cleaning, exploring, and joining these data in `prep_life_history_IUCN_bbs_birdcall.R`. Here we simply read in the intermediate data, ready for use.
+
+```{r read-in-data}
+birds_life_history_IUCN_bbs_birdcall = read_csv(
+  here::here(
+    "data",
+    "intermediate_data",
+    "birds_life_history_IUCN_bbs_birdcall.csv"
+  )
+) 
+```
+
+Take a quick glimpse at the data:
+
+```{r glimpse-data}
+glimpse(birds_life_history_IUCN_bbs_birdcall)
+```
+
+Note that column `aou` is the foreign key linking to the USGS breeding bird survey data we will cover below. Column `identifier` is the URL of bird call media.
+
+#### USGS breeding bird survey data
+
+USGS [Breeding Bird Survey (BBS)](https://www.usgs.gov/centers/eesc/science/north-american-breeding-bird-survey) project measures bird populations in North America each year. [Data](https://www.sciencebase.gov/catalog/item/52b1dfa8e4b0d9b325230cd9) of more than 500 species was collected by citizen scientists in U.S., Canada, and Mexico by conducting bird counts along BBS routes throughout the continent.
+
+Data cleaning and transformation steps were also done in `prep_life_history_IUCN_bbs_birdcall.R`. I summarized annual number of observations for each species to visualize how populations have been changed over time. I also filtered the year of observation to be after 2000 to avoid the situation where species had low number of observations because of incomplete sampling.
+
+```{r bbs-data}
+annual_num_observation = read_csv(here::here("data", "intermediate_data", "annual_num_observation.csv"))
+
+# This plot shows what the data is about: annual number of observations by species
+annual_num_observation |>
+  filter(aou == "01320") |> # select a species to show: Mallard
+  ggplot() +
+  geom_line(aes(x = year, 
+                y = num_observation)) +
+  theme_bw() +
+  labs(title = "Annual Number of Observations of Birds in North America",
+       subtitle = "Example species: Mallard",
+       x = "Year",
+       y = "Number of Observations")
+```
+
+I plan to display the trend of annual number of observations in the final table using sparklines, an in cell trend line of a list of values. To do that, I prepared the number of observation data in a list by species.
+
+```{r bbs-data-list}
+# convert the annual number of observation to a list by aou to be used in the table
+annual_num_observation_ls = annual_num_observation |>
+  summarize(num_observation_trend = list(num_observation),
+            .by = aou)
+
+annual_num_observation_ls |> head()
+```
+
+#### Diet
+
+Diet data was download from [R package {aviandietdb}](https://github.com/ahhurlbert/aviandietdb). It contains prey data of 759 bird species, along with functions to help summarize data at different taxonomic levels. The complete process of creating the intermediate data of diet is also available in `prep_life_history_IUCN_bbs_birdcall.R`.
+
+```{r read-diet-data}
+diet = read_csv(here::here("data", "intermediate_data", 'birds_diet_short.csv'))
+
+# add emoji to each category
+diet_emoji = diet |>
+  mutate(
+    emoji = case_when(
+      diet == "mammal" ~ "🐀",
+      diet == "amphibian" ~ "🐸",
+      diet == "bird" ~ "🐦",
+      diet == "reptile" ~ "🦎",
+      diet == "fish" ~ "🐟",
+      diet == "crustacean" ~ "🦀",
+      diet == "spider" ~ "🕷",
+      diet == "insect" ~ "🪲",
+      diet == "plant" ~ "🌿",
+      diet == "snail" ~ "🐌",
+      diet == "cyanobacteria" ~ "🦠",
+      diet == "worm" ~ "🪱",
+      diet == "centipede" ~ "🐛",
+      diet == "millipede" ~ "🐛",
+      diet == "conifer" ~ "🌲",
+      diet == "moss" ~ "🌿",
+      diet == "fern" ~ "🌿",
+      diet == "scallop" ~ "🐚"
+    )
+  ) 
+
+glimpse(diet_emoji)
+```
+
+#### Habitat, photos, and similar species
+
+Birds habitat data was collected manually from [Animal Biodiversity Web](https://animaldiversity.org/) and [All About Birds](https://www.allaboutbirds.org/) because it was really difficult to find a data source that closely meets my needs. I also manually selected representative and appealing images of the birds and their similar species. Appealing bird photos and external links to similar species are collected from [iNaturalist](https://www.inaturalist.org/) and [All About Birds](https://www.allaboutbirds.org/).
+
+```{r read-manual-data}
+# Bird image, similar species and habitat 
+birds_sheets = excel_sheets(here("data", "birds.xlsx"))
+my_birds = lapply(birds_sheets, function(x){
+  read_excel(here("data", "birds.xlsx"), sheet = x) |>
+    clean_names()
+}) |>
+  `names<-`(birds_sheets)
+
+# bird_manual table in my_birds contains birds common name, genus, species along with url to birds images, similar species images, and similar species information
+glimpse(my_birds$bird_manual)
+
+
+# Habitat data with emoji
+habitat_emoji = my_birds$habitat |>
+  pivot_longer(habitat_1:habitat_8, 
+               values_to = "habitat",
+               values_drop_na = TRUE) |>
+  select(-name) |>
+  select(-genus, -species) |>
+  # full list of emoji: https://unicode.org/emoji/charts/full-emoji-list.html
+  # Use emoji habitat data 
+  mutate(emoji = case_when(
+    habitat == "desert" ~ "🏜",
+    habitat == "agricultural" ~ "🌾",
+    habitat == "forest" ~ "🌲",
+    habitat == "grassland" ~ "🌿",
+    habitat == "coastal" ~  "🏖",
+    habitat == "urban" ~ "🏙",
+    habitat == "suburban" ~ "🏙",
+    habitat == "lakes and ponds" ~ "🌊",
+    habitat == "rivers and streams" ~ "🌊",
+    habitat == "marsh" ~ "🌊",
+    habitat == "estuarine" ~ "🌊",
+    habitat == "tundra" ~ "🏔",
+    habitat == "taiga" ~ "🌲",
+    habitat == "rainforest" ~ "🌳",
+    habitat == "mountains" ~ "⛰",
+    habitat == "brackish water" ~ "🌊",
+    habitat == "riparian" ~ "🌊",
+    habitat == "swamp" ~ "🌊",
+    habitat == "scrub forest" ~ "🌳",
+    habitat == "chaparral" ~ "🌲"
+  )) |>
+  # for better display in gt table, shorten the two phrases
+  mutate(habitat = case_when(
+    habitat == "lakes and ponds" ~ "lakes",
+    habitat == "rivers and streams" ~ "rivers",
+    TRUE ~ habitat))  |>
+  filter(habitat != "brackish water")
+
+glimpse(habitat_emoji)
+```
+
+#### Range data
+
+Range data with 9km resolution was downloaded for birds in table `birds_life_history_IUCN_bbs_birdcall` from [eBird](https://ebird.org/explore) using the [R package {ebirdst}](https://ebird.github.io/ebirdst/index.html). Column `species_code` is the key to connect range data to the main table. There are 14 species missing range data. The basemap is created using country polygon data from [Natural Earth R package {rnaturalearth}](https://cran.r-project.org/web/packages/rnaturalearth/vignettes/rnaturalearth.html).
+
+```{r load-ebirdst}
+# eBird Data of Species Range 
+# download range spacial data from eBird, using the {ebirdst} package
+# load the package and set up access key
+library(ebirdst)
+set_ebirdst_access_key("2gmivfp8e7pb", overwrite = TRUE)
+```
+
+Downloading range data takes a long time. I will disable running the download process in the code chunk below and already have them downloaded in `data/ebird/`.
+
+```{r download-range-data}
+#| eval: false
+# eval: false
+# find a list of species that are in the ebirdst data base
+list_of_species = birds_life_history_IUCN_bbs_birdcall |>
+  inner_join(ebirdst::ebirdst_runs |>
+              select(scientific_name),
+            by = "scientific_name") |>
+  pull(scientific_name)
+
+for (i in 1:length(list_of_species)) {
+  ebirdst_download_status(species = list_of_species[i], 
+                          # save data to data/ebrid
+                          path = here("data", "ebrid"),
+                          # only download data with smooth_9km resolution
+                          pattern = "smooth_9km",
+                          # skip abundance data for today - it's brilliant data!
+                          download_abundance = FALSE,
+                          # download range data only
+                          download_ranges = TRUE)
+}
+
+```
+
+Now, we have the range data downloaded. Let's read them in and take a look at an example of the range data.
+
+```{r read-sf-data}
+# read in the range data using {sf}
+library(sf)
+range_data_dir = list.files(here("data", "ebrid", "2022"), 
+                                full.names = TRUE) |>
+  paste0("/ranges") |>
+  list.files(full.names = TRUE)
+range_data = lapply(range_data_dir, function(x){
+  read_sf(x)
+}) |>
+  # name the range data with species code
+  `names<-`(list.files(here("data", "ebrid", "2022"), 
+                       full.names = FALSE))
+
+# an example of range data
+range_data$amecro
+
+# append species code to the main table
+birds_life_history_IUCN_bbs_birdcall_range = birds_life_history_IUCN_bbs_birdcall |>
+  left_join(ebirdst::ebirdst_runs |>
+              select(species_code, scientific_name), 
+            by = "scientific_name") 
+
+# download world country polygon data from natural earth in sf format
+library(rnaturalearth)     
+world_country = ne_countries(returnclass = "sf") 
+```
+
+# Functions create table add-ons
+
+To create table add-ons, such as maps, sound players, and linked images for each row (i.e. species) in the table, I created functions that can be used in the table creation process.
+
+#### Insert range map
+
+```{r fcn-rangemap}
+#| message: false
+#| warning: false
+library(terra)
+# function that inserts range map --------------------------------------------------------------
+
+fcn_range_map = function(species_code){
+  if(is.na(species_code) | species_code %in% names(range_data) == FALSE){
+  # because ggplot_image() will be used to render the plot in gt table, we need to also create a ggplot object when range data is not available
+    ggplot() +
+      geom_text(aes(x = 0, y = 0),
+                label = "Range map is not available",
+                family = "sans",
+                color = "grey20",
+                size = 7.5) +
+      theme_void() 
+      
+  } else {
+    range = range_data[[species_code]]
+    world_country_crs = world_country |> 
+    # transform world_country polygon to the same crs as range data
+    sf::st_transform(crs = terra::crs(range))
+    
+    ggplot() +
+      geom_sf(data = world_country_crs,
+              fill = "grey93",
+              color = "white") +
+      geom_sf(data = range ,
+              fill = "#1B8E29",
+              color = "#1B8E29",
+              alpha = 1)  +
+      geom_sf(data = world_country_crs,
+              color = "grey96",
+              alpha = 0) +
+  
+      theme_minimal() +
+      # narrow down view to only countries following under the species range
+      coord_sf(xlim = c(st_bbox(range)['xmin'], st_bbox(range)['xmax']),
+               ylim = c(st_bbox(range)['ymin'], st_bbox(range)['ymax'])) +
+      theme(legend.position = "none",
+            panel.background = element_rect(fill = "skyblue4"),
+            panel.grid.major = element_line(color = "skyblue3", 
+                                            size = 0.13)
+            )
+  }
+}
+
+# this is an example of what to expect from the function ------------------------------
+fcn_range_map(species_code = names(range_data)[4]) # test the function
+```
+
+#### Insert sound player for bird call
+
+One trick to embed audio in a shiny app is to use the `tags$audio` function from the {shiny} package. In fact, `shiny::tags$` is a very handy helper to create html tags in R. You can use it to create combinations of html tags to include in gt table. For similar species, I combined species name (`tags$p`), image (`tags$image`), and external link (`tags$a`) to the species page in one cell. You can simply use `as.character() |> gt::html()` to convert the html tags to a character string that can be rendered as html in gt table.
+
+```{r fcn-birdcall}
+# function that embeds bird call audio
+fcn_sound_player = function(url){
+  
+  if(is.na(url)){
+    # message when bird call is not available
+    return("Audio is not available")
+  }
+  
+  if(stringr::str_detect(stringr::str_to_lower(url), ".mp3")){
+    audio_type = "audio/mp3"
+  } else if(stringr::str_detect(stringr::str_to_lower(url), ".wav")){
+    audio_type = "audio/wav"
+  } else {
+    return("Audio file type is not supported")
+  }
+  require(shiny, quietly = T)
+  tags$audio(src = url,
+             type = audio_type,
+             controls = TRUE) |>
+    as.character() |>
+    gt::html()
+}
+```
+
+```{r fcn-image}
+# function that embeds text, image with external link
+fcn_linked_image_embed = function(url, 
+                           go_to_url, 
+                           text, 
+                           width = "200px"){
+  require(shiny, quietly = T)
+  embed_image = tags$image(src = url,
+             width = width) 
+  add_link = tags$a(href = go_to_url, 
+                    embed_image) 
+  tags$p(text, 
+         # add line break
+         html("<br></br>"), 
+         add_link) |>
+    as.character() |>
+    gt::html()
+}
+
+# function that embeds image and text
+fcn_text_image_embed = function(url, 
+                                text, 
+                                width = "200px"){
+  require(shiny, quietly = T)
+  embed_image = tags$image(src = url,
+             width = width) 
+  tags$p(text, 
+         # add line break
+         html("<br></br>"), 
+         embed_image) |>
+    as.character() |>
+    gt::html()
+}
+
+```
+
+#### Properly format diet and habitat data
+
+For diet and habitat data, I hope to present them as an item list by bird species where each item starts with a representative emoji. I created a function that can properly format the the two fields using the html trick as well. It will return visuals in each vell like the example below:
+
+🌲 Forest
+
+🏖 Coastal
+
+🐦 Bird
+
+🦎 Reptile
+
+```{r emoji-data}
+
+fcn_emoji_list = function(df, label_var) {
+  df1 = df |>
+    mutate(label_fmt = str_to_sentence({{label_var}}) |>
+             # add a comma "," after each item. It will be used to separate out each item in a new line by replacing it with "</p><p>"
+             paste0(",")) |>
+    # append emoji to the front
+    mutate(emoji_with_label = paste0(emoji, " ", label_fmt))
+  
+  df_out = aggregate(
+    # aggregate diet or habitat items for each bird species
+    emoji_with_label ~ common_name,
+    data = df1,
+    FUN = paste,
+    collapse = ""
+  ) |>
+    rowwise() |>
+    # mutate(emoji_with_label = str_replace(emoji_with_label, ",$", "")) |>
+    mutate(
+      emoji_with_label = str_replace_all(emoji_with_label, ",", "</p><p>"),
+      emoji_with_label = paste0("<p>", emoji_with_label, "</p>")
+    ) 
+  return(df_out)
+}
+
+# apply the function to both habitat and diet data 
+habitat_emoji_comb = fcn_emoji_list(habitat_emoji, label_var = habitat) |>
+  rename(habitat_emoji_with_label = emoji_with_label)
+ 
+diet_emoji_comb = fcn_emoji_list(diet_emoji, label_var = diet) |>
+  rename(diet_emoji_with_label = emoji_with_label)
+
+head(habitat_emoji_comb)
+```
+
+# Build the table
+
+Now we have everything to build the table of birds using {gt}.
+
+First, let's combine everything into a \`bird_final\` data.
+
+```{r final-data}
+library(gt)
+library(gtExtras)
+
+birds_final = birds_life_history_IUCN_bbs_birdcall_range |>
+  arrange(scientific_name) |>
+  # join in images and urls that were manually collected
+  left_join(my_birds$bird_manual,
+            by = c("common_name")) |>
+  # join in breeding bird survey data
+  left_join(annual_num_observation_ls,
+            by = c("aou" = "aou")) |>
+  # join in diet data
+  left_join(diet_emoji_comb,
+            by = "common_name") |>
+  mutate(diet_emoji_with_label = ifelse(is.na(diet_emoji_with_label), 
+                                        "<p>Diet data is not available</p>", 
+                                        diet_emoji_with_label)) |>
+  # join in habitat data
+  left_join(habitat_emoji_comb,
+            by = "common_name") |>
+  mutate(habitat_emoji_with_label = ifelse(is.na(habitat_emoji_with_label), 
+                                           "<p>Habitat data is not available</p>", 
+                                           habitat_emoji_with_label)) |>
+  # select columns to show at order that looks good to me
+  select(
+    iucn_red_list,
+    image,
+    common_name,
+    birth_or_hatching_weight_g:adult_svl_cm,
+    diet_emoji_with_label,
+    habitat_emoji_with_label,
+    num_observation_trend,
+    species_code,
+    bird_call = identifier,
+    similar_species,
+    similar_species_link,
+    similar_species_image
+  ) |>
+  # make iucn_red_list a factor. This will be helpful for coloring
+  mutate(iucn_red_list = factor(iucn_red_list,
+                                levels = c("Least Concern",
+                                           "Near Threatened",
+                                           "Vulnerable",
+                                           "Endangered",
+                                           "Critically Endangered",
+                                           "Extinct in the Wild",
+                                           "Extinct"))) |>
+  rowwise() |>
+  mutate(
+    # create the display of the species: a combination of common name and image
+    image = pmap(
+      .l = list(url = image |> as.list(), 
+                text = common_name |> as.list()),
+      .f = fcn_text_image_embed, 
+      width = "200px" # set width of the image
+    ),
+    # create the display of similar species: a combination of common data, image, and external link
+    similar_species_combined = pmap(
+      .l = list(
+        url = similar_species_image |> as.list(),
+        go_to_url = similar_species_link |> as.list(),
+        text = similar_species |> as.list()
+      ),
+      .f = fcn_linked_image_embed,
+      width = "200px" # set width of the image
+    ),
+    # create the sound player embed of bird call
+    bird_call = map(bird_call, 
+                    .f = fcn_sound_player)
+  ) |>
+  # remove columns already included in above displays
+  select(-c(
+    common_name,
+    similar_species,
+    similar_species_link,
+    similar_species_image
+  )) 
+
+```
+
+Let's turn the data into a **gt** table and format cells with colors, sparklines, themes, etc..
+
+
+```{r gt-table}
+#| message: false
+#| warning: false
+bird_gt = birds_final |>
+  gt() |>
+  # color iucn red list column
+  data_color(
+    columns = iucn_red_list,
+    method = "factor",
+    ordered = TRUE, # use the factor level orders of iucn_red_list
+    palette = "RdYlGn",
+    reverse = TRUE # reverse the order of color palette
+  ) |>
+  # format diet column
+  text_transform(fn = function(x) map(birds_final$diet_emoji_with_label, gt::html),
+                 locations = cells_body(columns = diet_emoji_with_label)) |>
+  # format habitat column
+  text_transform(fn = function(x) map(birds_final$habitat_emoji_with_label, gt::html),
+                 locations = cells_body(columns = habitat_emoji_with_label)) |>
+  # use sparkline to visualize the trend of survey observation
+  gt_plt_sparkline(
+    column = num_observation_trend,
+    type = "ref_last",
+    palette = c("#56290C", # sparkline color,
+                "black", # final value color
+                "#FB260C", # range color low,
+                "#1B8E29", # range color high,
+                "grey"), # 'type' color (eg shading or reference lines)
+    fig_dim = c(25, 65),
+    same_limit = FALSE
+  ) |>
+  # embed range map
+  text_transform(
+    locations = cells_body(columns = species_code),
+    fn = function(x) {
+      map(birds_final$species_code, fcn_range_map) |>
+        ggplot_image(height = px(250))
+    }
+  ) |>
+  cols_label(iucn_red_list = "IUCN",
+             image = "Common Name",
+             birth_or_hatching_weight_g = "Hatching Weight (g)",
+             adult_body_mass_g = "Adult Body Mass (g)",
+             litter_or_clutch_size_n = "Clutch Size",
+             litters_or_clutches_per_y = "Clutches per Year",
+             fledging_age_d = "Fledging Age (days)",
+             male_maturity_d = "Male Maturity (days)",
+             female_maturity_d = "Female Maturity (days)",
+             maximum_longevity_y = "Maximum Longevity (years)",
+             adult_svl_cm = "Adult Snout-Vent Length (cm)",
+             diet_emoji_with_label = "Common Diet",
+             habitat_emoji_with_label = "Representative Habitat",
+             num_observation_trend = "Observations in North America Since 2000",
+             species_code = "Global Range Map",
+             bird_call = "Bird Call",
+             similar_species_combined = "Similar Species 🔗"
+             ) |>
+  # remove trailing zeros of all life history numeric data
+  fmt_number(
+    columns = c(
+      birth_or_hatching_weight_g,
+      adult_body_mass_g,
+      litter_or_clutch_size_n,
+      litters_or_clutches_per_y,
+      fledging_age_d,
+      male_maturity_d,
+      female_maturity_d,
+      maximum_longevity_y,
+      adult_svl_cm),
+    drop_trailing_zeros = TRUE
+    ) |>
+  # color life history numeric data for easier comparison
+  data_color(
+    columns = c(
+      birth_or_hatching_weight_g,
+      adult_body_mass_g,
+      litter_or_clutch_size_n,
+      litters_or_clutches_per_y,
+      fledging_age_d,
+      male_maturity_d,
+      female_maturity_d,
+      maximum_longevity_y,
+      adult_svl_cm),
+    method = "numeric",
+    palette = "Blues"
+  ) |>
+  # add table titles, spanners to groups columns and footnotes
+  tab_header(title = "Table of Birds 🐦",
+             subtitle = "Learn birds life history and ecological features while enjoying beautiful images and bird calls! ") |>
+  tab_spanner(
+    label = "BIRD",
+    columns = c(
+      iucn_red_list:image
+    )
+  ) |>
+  tab_spanner(
+    label = "LIFE HISTORY",
+    id = "life_history",
+    columns = c(
+      birth_or_hatching_weight_g:adult_svl_cm
+    )
+  ) |>
+  tab_spanner(
+      label = "ECOLOGICAL FEATURES",
+    columns = c(
+      diet_emoji_with_label:bird_call
+    )
+  ) |>
+  tab_spanner(
+    label = "SIMILAR SPECIES",
+    columns = c(
+      similar_species_combined
+    )
+  ) |>
+  # add data sources in footnote
+  tab_footnote(
+    footnote = "Data gathered from USGS Breeding Bird Survey.",
+    locations = cells_column_labels(columns = num_observation_trend)
+  ) |>
+  tab_footnote(
+    footnote = "Range data with 9km resolution downloaded from eBird.",
+    locations = cells_column_labels(columns = species_code)
+  ) |>
+  tab_footnote(
+    footnote = "Images from valuable contributors to iNaturalist and All About Birds.",
+    locations = cells_column_labels(columns = c(image, similar_species_combined))
+  ) |>
+  tab_footnote(
+    footnote = "IUCN data was downloaded from GBIF.",
+    locations = cells_column_labels(columns = iucn_red_list)
+  ) |>
+  tab_footnote(
+    footnote = "Life history data from database created by Myhrvold et al. 2015.",
+    locations = cells_column_spanners(spanners = "life_history")
+  ) |>
+  tab_footnote(
+    footnote = "Diet data download from R package {aviandietdb}.",
+    locations = cells_column_labels(columns = diet_emoji_with_label)
+  ) |>
+  tab_footnote(
+    footnote = "Bird call data was collected from Xeno-canto and downloaded from GBIF.",
+    locations = cells_column_labels(columns = bird_call)
+  ) |>
+  tab_footnote(
+    footnote = "Birds habitat data collected from Animal Biodiversity Web and All About Birds.",
+    locations = cells_column_labels(columns = habitat_emoji_with_label)
+  ) |>
+  tab_options(footnotes.multiline = FALSE) |>
+  # use 538 theme
+  gt_theme_538() |>
+  # fix table header using method from this issue: https://github.com/rstudio/gt/issues/1545
+  tab_options(column_labels.background.color = "white") |>
+  tab_options(container.height = px(1200),
+              container.padding.y = px(0)) |>
+  tab_style(
+    style = css(
+      position = "sticky",
+      top = px(-1),
+      zIndex = 100
+    ),
+    locations = list(
+      cells_column_spanners(),
+      cells_column_labels()
+    )
+  ) 
+
+bird_gt
+```
+
+```{r save-gt-table}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+gtsave(data = bird_gt,
+       filename = "final_table.html")
+
+```
+
+# Things I couldn't get work
+
+There are a couple of features that I tried to implement but couldn't get them work. For example, I couldn't customize column widths with `gt::cols_width` function. I also was not able to use `gt::opt_interactive` to add filtering, sorting, searching, pagination features to the table. Any advice on how to make them work would be greatly appreciated 🥰!
+
+# Acknowledgement
+
+All the wonderful photographers that shared their bird photos on iNaturalist and All About Birds 💗.
+
+GitHub Copilot in R Studio: contributions to document narrative, code completion and comments.
+
+ChatGPT: contributions to data transformation, emoji suggestions, filling in domain knowledge gap, and code help.
+
+# References
+
+Hurlbert, AH, AM Olsen, MM Sawyer, and PM Winner. 2021. The Avian Diet Database as a quantitative source of information on avian diets. Scientific Data 8:260. https://doi.org/10.1038/s41597-021-01049-9
+
+IUCN (2022). The IUCN Red List of Threatened Species. Version 2022-2. https://www.iucnredlist.org. Downloaded on 2023-05-09. https://doi.org/10.15468/0qnb58 accessed via GBIF.org on 2023-11-17. accessed via GBIF.org on 2024-05-17.
+
+Matthew Strimas-Mackey, Shawn Ligocki, Tom Auer, Daniel Fink (2023). ebirdst: Access and Analyze eBird Status and Trends Data Products. R package version 3.2022.0. https://ebird.github.io/ebirdst/
+
+Myhrvold, N.P., Baldridge, E., Chan, B., Sivam, D., Freeman, D.L., Ernest, S.K.M., 2015. An amniote life-history database to perform comparative analyses with birds, mammals, and reptiles. Ecology 96, 3109–3109. https://doi.org/10.1890/15-0846R.1
+
+Vellinga W (2024). Xeno-canto - Bird sounds from around the world. Xeno-canto Foundation for Nature Sounds. Occurrence dataset https://doi.org/10.15468/qv0ksn accessed via GBIF.org on 2024-05-23.
+
+Ziolkowski, D.J., Lutmerding, M., English, W.B., Aponte, V.I., and Hudson, M-A.R., 2023, North American Breeding Bird Survey Dataset 1966 - 2022: U.S. Geological Survey data release, https://doi.org/10.5066/P9GS9K64.
